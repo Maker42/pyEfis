@@ -47,6 +47,10 @@ METERS_FOOT = 0.3048
 FEET_METER = 1.0 / METERS_FOOT
 EARTH_RADIUS_M=6356752.0
 EARTH_RADIUS=EARTH_RADIUS_M * FEET_METER
+NAUT_MILES_PER_METER = .0005399568
+FEET_NM = FEET_METER / NAUT_MILES_PER_METER
+
+VVObject = None
 
 class VirtualVfr(AI):
     CENTERLINE_WIDTH = 3
@@ -60,7 +64,7 @@ class VirtualVfr(AI):
     def __init__(self, parent=None):
         super(VirtualVfr, self).__init__(parent)
         self.display_objects = dict()
-        time.sleep(.4)      # Pause to let DB load
+        VVObject = self
         self.lng_item = fix.db.get_item("LONG")
         self.lat_item = fix.db.get_item("LAT")
         self.head_item = fix.db.get_item("HEAD")
@@ -707,6 +711,52 @@ class PointOfView:
                         elevation = obj.elevation
         return elevation
 
+    def is_over_runway():
+        NOMIN = 99999999
+        min_distance = NOMIN
+        rel_lng = 0
+        runway = None
+        curpos = (self.gps_lng,self.gps_lat)
+        for object_list in self.object_cache.values():
+            for obj in object_list:
+                if isinstance(obj, CIFPObjects.Runway):
+                    course = [curpos, (obj.lng,obj.lat)]
+                    distance, rel_lng = \
+                            Distance(course, rel_lng=rel_lng)
+                    if distance < min_distance:
+                        min_distance = distance
+                        runway = obj
+        ret = False
+        if runway is not None:
+            opp_runway = runway.opposing_rw
+            if opp_runway is not None:
+                runway_course = [(runway.lng,runway.lat),
+                                 (opp_runway.lng,opp_runway.lat)]
+                dev,between = CourseDeviationBetween(curpos, runway_course, rel_lng)
+                if between and dev < 300:
+                    ret = True
+        return ret
+
+    def in_airport_vicinity():
+        NOMIN = 99999999
+        min_distance = NOMIN
+        rel_lng = 0
+        airport = None
+        curpos = (self.gps_lng,self.gps_lat)
+        for object_list in self.object_cache.values():
+            for obj in object_list:
+                if isinstance(obj, CIFPObjects.Airport):
+                    course = [curpos, (obj.lng,obj.lat)]
+                    distance, rel_lng = \
+                            Distance(course, rel_lng=rel_lng)
+                    if distance < min_distance:
+                        min_distance = distance
+                        airport = obj
+        ret = False
+        if airport is not None and min_distance < 3:
+            ret = True
+        return ret
+
     def render(self, display_object):
         if not self.do_render:
             return
@@ -747,6 +797,19 @@ class PointOfView:
         if debug:
             log.debug ("point2D %s->%s ==> %s ==> %s"%(str(self.pov_position), str(point_position), str(r), str(p)))
         return p
+
+
+def in_airport_vicinity():
+    if VVObject is None:
+        return False
+    else:
+        return VVObject.in_airport_vicinity()
+
+def is_over_runway():
+    if VVObject is None:
+        return False
+    else:
+        return VVObject.is_over_runway()
 
 def yvec_points_east (yvec, pov_position, pov_polar):
     yvec_pos = copy.copy(yvec)
@@ -802,6 +865,12 @@ def get_polar_deltas(course):
 def GetRelLng(lat1):
     return math.cos(lat1)
 
+def GetAdjustedPolarDeltas(course, rel_lng=0):
+    dlng,dlat = get_polar_deltas(course)
+    if rel_lng == 0:
+        rel_lng = GetRelLng(course[0][1] * RAD_DEG)
+    return (dlng*rel_lng, dlat)
+
 # Computes true heading from a given course
 def Distance(course, rel_lng=0):
     dlng,dlat = get_polar_deltas(course)
@@ -817,6 +886,38 @@ def Distance(course, rel_lng=0):
     distance = math.sqrt(dlng * dlng + dlat * dlat) * 60.0      # Multiply by 60 to convert from degrees to nautical miles.
 
     return distance, relative_lng_length
+
+def CourseDeviationBetween(pos, course, rel_lng = 0):
+    if rel_lng == 0:
+        rel_lng = GetRelLng(course[0][1] * RAD_DEG)
+    dlng, dlat = GetAdjustedPolarDeltas(course, rel_lng)
+    cvec = Spatial.Vector(dlng,dlat,0)
+    up = Spatial.Vector(0,0,1)
+    pnormal = cvec.cross_product(up)
+    destpoint = Spatial.Point3(course[1][0] * rel_lng, course[1][1], 0)
+    course_plane = Spatial.Plane(destpoint, normal=pnormal)
+    curpoint = Spatial.Point3 (pos[0] * rel_lng, pos[1], 0)
+    r = Spatial.Ray(curpoint,dir=pnormal)
+    intersect = course_plane.intersect(r)
+
+    deviation_vect = Spatial.Point3(ref=intersect)
+    deviation_vect.sub(curpoint)
+    side = deviation_vect.norm()
+    side *= 60.0        # 60 nm per degree
+    side *= FEET_NM
+
+    dlng, dlat = GetAdjustedPolarDeltas ([pos, course[1]], rel_lng)
+    heading_to_dest = atan_globe(dlng, dlat) * 180 / M_PI
+    dlng, dlat = GetAdjustedPolarDeltas ([pos, course[0]], rel_lng)
+    heading_to_origin = atan_globe(dlng, dlat) * 180 / M_PI
+    hdiff = heading_to_dest - heading_to_origin
+    if hdiff > 180:
+        hdiff -= 360
+    elif hdiff < -180:
+        hdiff += 360
+    between = abs(hdiff) > 90
+
+    return (side, between)
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ from instruments import airspeed
 from instruments import altimeter
 from instruments import vsi
 from instruments import tc
+from instruments.airball import AirBall
 
 class Screen(QWidget):
     def __init__(self, parent=None):
@@ -57,6 +58,7 @@ class Screen(QWidget):
         self.heading_disp = hsi.HeadingDisplay(self, font_size=12, fgcolor="#0030FF")
         self.alt_setting = altimeter.Altimeter_Setting(self)
         self.tc = tc.TurnCoordinator(self, dial=False)
+        self.air_ball = AirBall(self)
 
         self.map_g = gauges.ArcGauge(self)
         self.map_g.name = "MAP"
@@ -153,8 +155,13 @@ class Screen(QWidget):
         self.alt_setting.move(instWidth -100, instHeight + 100)
 
         tc_width = instWidth * .23
+        if tc_width > 150:
+            tc_width = 150
         self.tc.resize (tc_width, tc_width)
         self.tc.move ((instWidth-tc_width)/2, instHeight+100-tc_width/3)
+
+        self.air_ball.resize (instWidth/10, instHeight/5)
+        self.air_ball.move (100, 120)
 
         self.map_g.resize(200, 100)
         self.map_g.move(self.width() - 200, 100)
