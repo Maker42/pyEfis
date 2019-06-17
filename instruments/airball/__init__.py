@@ -28,7 +28,7 @@ import pyavtools.fix as fix
 import pyavtools.filters as filters
 import instruments.ai.VirtualVfr as VirtualVfr
 
-from aural import aural_warning_loop
+from instruments.airball.aural import aural_warning_loop
 
 class AirBall(QGraphicsView):
     max_color_danger_level = 8.0
@@ -63,6 +63,7 @@ class AirBall(QGraphicsView):
         self.athread = threading.Thread(target=aural_warning_loop, args=(self.audio_cmdq,))
         self.athread.start()
         self.audio_playing = None
+        self.audio_volume = None
 
     def __del__(self):
         self.audio_cmdq.put("quit")
@@ -104,6 +105,14 @@ class AirBall(QGraphicsView):
             self.alpha_min = -self.alpha_max
         self.alpha_range = self.alpha_max - self.alpha_min
         self.aural_warnings = self.myparent.get_config_item('aural_warnings')
+
+        mixer = self.myparent.get_config_item('amixer')
+        if mixer is not None:
+            self.audio_cmdq.put(('mixer', tuple(mixer)))
+
+        player = self.myparent.get_config_item('aplayer')
+        if player is not None:
+            self.audio_cmdq.put(('dev', tuple(player)))
 
         filter_depth = self.myparent.get_config_item('alat_filter_depth')
         if filter_depth is not None and filter_depth > 0:
@@ -245,10 +254,16 @@ class AirBall(QGraphicsView):
                     if danger_level > self.aural_warnings[-level][0]:
                         l,vol,path = self.aural_warnings[-level]
                         if self.audio_playing is not None:
-                            self.audio_cmdq.put('stop')
-                        self.audio_playing = -level
-                        self.audio_cmdq.put(("vol", vol))
-                        self.audio_cmdq.put(("play", path))
+                            if self.audio_playing != path:
+                                self.audio_cmdq.put('stop')
+                                self.audio_cmdq.put(("play", path))
+                        else:
+                            self.audio_cmdq.put(("play", path))
+                        self.audio_playing = path
+                        if self.audio_volume is None or \
+                                    self.audio_volume != vol:
+                            self.audio_cmdq.put(("vol", vol))
+                            self.audio_volume = vol
                         break
             else:
                 self.audio_cmdq.put('stop')

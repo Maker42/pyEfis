@@ -4,7 +4,7 @@ main:
   FixPort: 3490
   # Screen Geometry
   #screenWidth: 1024
-  #screenHeight: 768
+  #screenHeight: 614
   screenWidth: 800
   screenHeight: 480
 
@@ -128,7 +128,6 @@ databindings:
 outputs:
   #TAS = Interval
   BARO: Interval
-  BTN16: OnChange
 
 
 # Screen definitions describe the screens that will be loaded
@@ -152,6 +151,7 @@ screens:
     dbpath: CIFP/FAACIFP18
     indexpath: CIFP/index.bin
     update_period: .1
+    amixer: [PCM, 0]
     alpha_x: 8
     alpha_y: 6.5
     aural_warnings:

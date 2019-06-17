@@ -31,12 +31,15 @@ playing = False
 
 def aural_warning_loop(command_queue):
     global playing
-    playback_device = alsaaudio.PCM()
-    mixer = alsaaudio.Mixer()
+
+    playback_devname = 'default'
+    playback_index = -1
+    mixer_control = 'Master'
+    mixer_id=0
+    mixer=None
+
     feed_thread = None
-    playback_format = None
-    playback_rate = None
-    playback_channels = None
+
     while True:
         cmd = command_queue.get()
         if isinstance(cmd,str):
@@ -45,31 +48,38 @@ def aural_warning_loop(command_queue):
                 if feed_thread is not None:
                     feed_thread.join()
                     feed_thread = None
+                playback_device = None
+                mixer = None
                 return  # quit
             elif cmd.lower().startswith('stop'):
                 playing = False
+                #print ("Stop playing")
                 if feed_thread is not None:
                     feed_thread.join()
                     feed_thread = None
+                playback_device = None
         elif isinstance(cmd,tuple):
             cmd,args = cmd
             if cmd.lower().startswith('play'):
+                #print ("Start playing %s"%args)
+                playback_device = alsaaudio.PCM(device=playback_devname,
+                                cardindex=playback_index)
                 args = (playback_device,args)
                 feed_thread = threading.Thread(target=play_wav, args=args)
                 playing = True
                 feed_thread.start()
             elif cmd.lower().startswith('vol'):
+                if mixer is None:
+                    mixer = alsaaudio.Mixer(control=mixer_control,id=mixer_id)
                 mixer.setvolume(args)
+            elif cmd.lower().startswith('mixer'):
+                mixer_control,mixer_id = args
             elif cmd.lower().startswith('dev'):
                 if len(args) == 1:
-                    devname = args[0]
-                    cardindex = -1
-                elif len(args) == 1:
-                    devname,cardindex = args
-                playback_device = alsaaudio.PCM(device=devname,
-                                cardindex=cardindex)
-                mixer = alsaaudio.Mixer(device=devname,
-                                cardindex=cardindex)
+                    playback_devname = args[0]
+                    playback_index = -1
+                elif len(args) == 2:
+                    playback_devname,playback_index = args
 
 def play_wav(device,path):
     global playing
@@ -126,6 +136,7 @@ def play_wav(device,path):
     bytes_write = bytes_sample * channels * frames_write
     device.setperiodsize(frames_write)
     # Write the first few chunks
+    #print ('playing %s'%path)
     for i in range(3):
         adata = fd.read(bytes_write)
         if len(adata) < bytes_write:
