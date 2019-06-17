@@ -44,3 +44,20 @@ This creates an index.bin file in CIFP directory
 
 Update the config file [Screen.PFD] section dbpath and indexpath
 with the path names of the FAACIFP18 and index.bin files respectively.
+
+Dependencies
+-----------------------------
+PyQt5       (pip install PyQt5)
+geomag      (pip install geomag)
+yaml        (pip install PyYAML)
+alsaaudio   (pip install pyalsaaudio)
+pyAvTools   (git clone https://github.com/makerplane/pyAvTools.git)
+            (In parent directory of pyEfis)
+FIX-Gateway (Not a direct dependency, but pyEfis must be connected
+              to a gateway in order to work)
+            (https://github.com/makerplane/FIX-Gateway)
+PIL         (pip install Pillow)
+
+Companion Packages
+-----------------------------
+pyAvMap (git clone https://github.com/makerplane/pyAvMap.git)

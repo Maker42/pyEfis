@@ -152,6 +152,15 @@ screens:
     dbpath: CIFP/FAACIFP18
     indexpath: CIFP/index.bin
     update_period: .1
+    alpha_x: 8
+    alpha_y: 6.5
+    aural_warnings:
+        - [3, 50,  'sounds/LowAlarm.wav']
+        - [4, 60,  'sounds/LowAlarm.wav']
+        - [5, 70,  'sounds/LowAlarm.wav']
+        - [6, 80,  'sounds/HighAlarm.wav']
+        - [7, 90,  'sounds/HighAlarm.wav']
+        - [8, 100, 'sounds/Emergency.wav']
 
   EMS:
     module: screens.ems_sm

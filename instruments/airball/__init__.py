@@ -14,6 +14,7 @@
 #  along with this program; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
+import threading, queue
 
 try:
     from PyQt5.QtGui import *
@@ -26,6 +27,8 @@ except:
 import pyavtools.fix as fix
 import pyavtools.filters as filters
 import instruments.ai.VirtualVfr as VirtualVfr
+
+from aural import aural_warning_loop
 
 class AirBall(QGraphicsView):
     max_color_danger_level = 8.0
@@ -55,6 +58,16 @@ class AirBall(QGraphicsView):
         self.alat_multiplier = 1.0 / (0.217)
         self.max_tc_displacement = 1.0 / self.alat_multiplier
 
+        # Aural setup
+        self.audio_cmdq = queue.Queue()
+        self.athread = threading.Thread(target=aural_warning_loop, args=(self.audio_cmdq,))
+        self.athread.start()
+        self.audio_playing = None
+
+    def __del__(self):
+        self.audio_cmdq.put("quit")
+        self.athread.join()
+
     def y_pos(self, alpha):
         ret = (alpha - self.alpha_min) * self.height() / self.alpha_range
         return ret
@@ -79,16 +92,18 @@ class AirBall(QGraphicsView):
         self.alpha_x = self.myparent.get_config_item('alpha_x')
         self.alpha_y = self.myparent.get_config_item('alpha_y')
         self.alpha_approach = self.myparent.get_config_item('alpha_approach')
-        self.alpha_stall = self.myparent.get_config_item('alpha_stall')
+        self.alpha_warn = self.aoa_item.get_aux_value('Warn')
+        self.alpha_stall = self.aoa_item.get_aux_value('Stall')
         if self.alpha_stall is None:
-            self.alpha_stall = 10
-        self.alpha_max = self.myparent.get_config_item('alpha_max')
+            self.alpha_stall = 15
+        self.alpha_max = self.aoa_item.get_aux_value('Max')
         if self.alpha_max is None:
             self.alpha_max = self.alpha_stall * 1.3
-        self.alpha_min = self.myparent.get_config_item('alpha_min')
+        self.alpha_min = self.aoa_item.get_aux_value('Min')
         if self.alpha_min is None:
             self.alpha_min = -self.alpha_max
         self.alpha_range = self.alpha_max - self.alpha_min
+        self.aural_warnings = self.myparent.get_config_item('aural_warnings')
 
         filter_depth = self.myparent.get_config_item('alat_filter_depth')
         if filter_depth is not None and filter_depth > 0:
@@ -207,7 +222,9 @@ class AirBall(QGraphicsView):
         centerball_x = (self.width()/2) * (1.0-(
                      acc_displacement * self.alat_multiplier))
         centerball_y = self.y_pos (self._aoa)
-        ball_color,flash = self.get_ball_color()
+        danger_level = self.get_danger_level()
+        ball_color,flash = self.get_ball_color(danger_level)
+        self.set_aural_warning (danger_level)
         if self.aoa_item.bad or self.ias_item.bad or self.alat_item.bad or \
            self.aoa_item.old or self.ias_item.old or self.alat_item.old:
             ball_color = QColor(Qt.gray)
@@ -221,8 +238,23 @@ class AirBall(QGraphicsView):
         self.ball_cross_v.setX(centerball_x)
         self.ball_cross_v.setY(centerball_y)
 
-    def get_ball_color(self):
-        danger_level = self.get_danger_level()
+    def set_aural_warning(self, danger_level):
+        if self.aural_warnings is not None:
+            if danger_level > self.aural_warnings[0][0]:
+                for level in range(1,len(self.aural_warnings)+1):
+                    if danger_level > self.aural_warnings[-level][0]:
+                        l,vol,path = self.aural_warnings[-level]
+                        if self.audio_playing is not None:
+                            self.audio_cmdq.put('stop')
+                        self.audio_playing = -level
+                        self.audio_cmdq.put(("vol", vol))
+                        self.audio_cmdq.put(("play", path))
+                        break
+            else:
+                self.audio_cmdq.put('stop')
+                self.audio_playing = None
+
+    def get_ball_color(self, danger_level):
         color_ratio = danger_level / self.max_color_danger_level
         flash = False
         if color_ratio > 1:
@@ -253,11 +285,11 @@ class AirBall(QGraphicsView):
         if self.agl_item.old or self.agl_item.bad or self.agl_item.fail:
             agl = 10000
         # First eliminate some standard flight states as 0 danger
-        if self.alpha_x is None:
-            alpha_x = self.alpha_stall * 3 / 4
+        if self.alpha_warn is None:
+            alpha_warn = self.alpha_stall * 3 / 4
         else:
-            alpha_x = self.alpha_x
-        if self._ias >= Vx and self._aoa < alpha_x:
+            alpha_warn = self.alpha_warn
+        if self._ias >= Vx and self._aoa < alpha_warn:
             return 0
         if abs(self.vs_item.value) < 20 and \
                 VirtualVfr.in_airport_vicinity():
