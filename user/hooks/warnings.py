@@ -18,6 +18,9 @@
 import time, struct
 import threading
 import alsaaudio
+import serial
+
+import pyavtools.fix as fix
 
 playing = False
 
@@ -29,57 +32,74 @@ playing = False
 0000040: 322e 3130 3000 6461 7461 a8ba 0600 0000  2.100.data......
 """
 
-def aural_warning_loop(command_queue):
-    global playing
+class AuralWarnings:
+    def __init__(self, config):
+        self.aural_warnings = config['aural_warnings']
 
-    playback_devname = 'default'
-    playback_index = -1
-    mixer_control = 'Master'
-    mixer_id=0
-    mixer=None
+        if 'amixer' in config:
+            mixer_control,mixer_id = config['amixer']
+            self.mixer = alsaaudio.Mixer(control=mixer_control,id=mixer_id)
+        else:
+            self.mixer = alsaaudio.Mixer()
 
-    feed_thread = None
+        if 'aplayer' in config:
+            self.playback_devname,self.playback_index = config['aplayer']
+        else:
+            self.playback_devname,self.playback_index = (None,None)
 
-    while True:
-        cmd = command_queue.get()
-        if isinstance(cmd,str):
-            if cmd.lower().startswith('q'):
-                playing = False
-                if feed_thread is not None:
-                    feed_thread.join()
-                    feed_thread = None
-                playback_device = None
-                mixer = None
-                return  # quit
-            elif cmd.lower().startswith('stop'):
-                playing = False
-                #print ("Stop playing")
-                if feed_thread is not None:
-                    feed_thread.join()
-                    feed_thread = None
-                playback_device = None
-        elif isinstance(cmd,tuple):
-            cmd,args = cmd
-            if cmd.lower().startswith('play'):
-                #print ("Start playing %s"%args)
-                playback_device = alsaaudio.PCM(device=playback_devname,
-                                cardindex=playback_index)
-                args = (playback_device,args)
-                feed_thread = threading.Thread(target=play_wav, args=args)
-                playing = True
-                feed_thread.start()
-            elif cmd.lower().startswith('vol'):
-                if mixer is None:
-                    mixer = alsaaudio.Mixer(control=mixer_control,id=mixer_id)
-                mixer.setvolume(args)
-            elif cmd.lower().startswith('mixer'):
-                mixer_control,mixer_id = args
-            elif cmd.lower().startswith('dev'):
-                if len(args) == 1:
-                    playback_devname = args[0]
-                    playback_index = -1
-                elif len(args) == 2:
-                    playback_devname,playback_index = args
+        self.danger_item = fix.db.get_item("DANGER_LEVEL", create=True, wait=False)
+        self.danger_item.valueChanged[float].connect(self.set_aural_warning)
+        self.audio_playing = None
+        self.audio_volume = None
+        self.feed_thread = None
+
+    def quit(self):
+        self.stop()
+        self.mixer = None
+
+    def stop(self):
+        global playing
+        playing = False
+        #print ("Stop playing")
+        if self.feed_thread is not None:
+            self.feed_thread.join()
+            self.feed_thread = None
+        self.audio_playing = None
+        self.playback_device = None
+
+    def play(self,path,vol):
+        global playing
+        if self.mixer is not None:
+            if vol != self.audio_volume:
+                self.mixer.setvolume(vol)
+                self.audio_volume = vol
+        if self.audio_playing is not None and path == self.audio_playing:
+            return
+
+        if playing:
+            self.stop()
+        if self.playback_devname is not None:
+            self.playback_device = alsaaudio.PCM(device=playback_devname,
+                            cardindex=playback_index)
+        else:
+            self.playback_device = alsaaudio.PCM()
+        args = (self.playback_device,path)
+        self.feed_thread = threading.Thread(target=play_wav, args=args)
+        playing = True
+        self.feed_thread.start()
+        self.audio_playing = path
+
+    def set_aural_warning(self, danger_level):
+        print ("danger_level %.2g"%danger_level)
+        if self.aural_warnings is not None:
+            if danger_level > self.aural_warnings[0][0]:
+                for level in range(1,len(self.aural_warnings)+1):
+                    if danger_level > self.aural_warnings[-level][0]:
+                        l,vol,path = self.aural_warnings[-level]
+                        self.play(path,vol)
+                        break
+            else:
+                self.stop()
 
 def play_wav(device,path):
     global playing
@@ -164,19 +184,43 @@ def play_wav(device,path):
     fd.close()
     return
 
-if __name__ == "__main__":
-    # Unit testing
-    import sys, queue
-    path,vol,duration = sys.argv[1:]
-    vol = int(vol)
-    duration = float(duration)
-    cmdq = queue.Queue()
-    athread = threading.Thread(target=aural_warning_loop, args=(cmdq,))
-    athread.start()
-    cmdq.put(("vol", vol))
-    cmdq.put(("play", path))
-    time.sleep(duration)
-    cmdq.put('stop')
-    time.sleep(1)
-    cmdq.put('quit')
-    athread.join()
+class StickShaker:
+    def __init__(self, config):
+        self.ttyname = config['ss_ttyname']
+        self.message = config['ss_message']
+        self.multiplier = config['ss_multiplier']
+        self.round_digits = config['ss_round_digits']
+        self.danger_item = fix.db.get_item("DANGER_LEVEL",
+                            create=True, wait=False)
+        self.danger_item.valueChanged[float].connect(self.shake_stick)
+        self.tty = serial.Serial(self.ttyname, config['ss_rate'], timeout=0)
+        self.shake_val = 0
+
+    def quit(self):
+        self.tty.write (self.message.format(0))
+        self.tty.close()
+        self.tty = None
+
+    def shake_stick(self, danger_level):
+        val = round(danger_level * self.multiplier, self.round_digits)
+        if val != self.shake_val:
+            self.tty.write (self.message.format(val))
+            self.shake_val = val
+
+aobj = None
+ssobj = None
+
+def start(config):
+    global aobj, ssobj
+    aobj = AuralWarnings(config)
+    if 'ss_ttyname' in config:
+        ssobj = StickShaker(config)
+
+def stop():
+    global aobj, ssobj
+    if aobj is not None:
+        aobj.quit()
+        aobj = None
+    if ssobj is not None:
+        ssobj.quit()
+        ssobj = None

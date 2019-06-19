@@ -23,8 +23,11 @@ import logging
 import importlib
 
 
+imodules = list()
+
 # Read through the configuration and load the hook modules
 def initialize(config):
+    global imodules
     log = logging.getLogger(__name__)
 
     if config == None: return # None Configured
@@ -33,8 +36,16 @@ def initialize(config):
         module = config[each]["module"]
         try:
             name = each
-            importlib.import_module(module)
+            m = importlib.import_module(module)
+            if 'config' in config[each]:
+                m.start(config[each]['config'])
+                imodules.append(m)
             #load_screen(each[7:], module, config)
         except Exception as e:
             logging.critical("Unable to load module - " + module + ": " + str(e))
             raise
+
+def stop():
+    global  imodules
+    for m in imodules:
+        m.stop()

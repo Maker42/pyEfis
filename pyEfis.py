@@ -114,6 +114,7 @@ if __name__ == "__main__":
 
     # Clean up and get out
     fix.stop()
+    hooks.stop()
     if 'FMS' in config:
         fms.stop()
     log.info("PyEFIS Exiting Normally")

@@ -151,16 +151,8 @@ screens:
     dbpath: CIFP/FAACIFP18
     indexpath: CIFP/index.bin
     update_period: .1
-    amixer: [PCM, 0]
     alpha_x: 8
     alpha_y: 6.5
-    aural_warnings:
-        - [3, 50,  'sounds/LowAlarm.wav']
-        - [4, 60,  'sounds/LowAlarm.wav']
-        - [5, 70,  'sounds/LowAlarm.wav']
-        - [6, 80,  'sounds/HighAlarm.wav']
-        - [7, 90,  'sounds/HighAlarm.wav']
-        - [8, 100, 'sounds/Emergency.wav']
 
   EMS:
     module: screens.ems_sm
@@ -181,6 +173,17 @@ screens:
 # main window and default screen are shown.  We'll add more as the
 # need arises.
 hooks:
+  warnings:
+      module: user.hooks.warnings
+      config:
+        aural_warnings:
+            - [3, 50,  '/media/sf_Garrett/Documents/Makerplane/LowAlarm.wav']
+            - [4, 60,  '/media/sf_Garrett/Documents/Makerplane/LowAlarm.wav']
+            - [5, 70,  '/media/sf_Garrett/Documents/Makerplane/LowAlarm.wav']
+            - [6, 80,  '/media/sf_Garrett/Documents/Makerplane/HigherAlarm.wav']
+            - [7, 90,  '/media/sf_Garrett/Documents/Makerplane/HigherAlarm.wav']
+            - [8, 100, '/media/sf_Garrett/Documents/Makerplane/Emergency.wav']
+        #amixer: [PCM, 0]
   # Keys:
   #   module: user.hooks.keys
   # Composite:
