@@ -15,6 +15,7 @@
 #  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 import threading, queue
+import logging
 
 try:
     from PyQt5.QtGui import *
@@ -27,6 +28,8 @@ except:
 import pyavtools.fix as fix
 import pyavtools.filters as filters
 import instruments.ai.VirtualVfr as VirtualVfr
+
+log = logging.getLogger(__name__)
 
 class AirBall(QGraphicsView):
     max_color_danger_level = 8.0
@@ -57,6 +60,7 @@ class AirBall(QGraphicsView):
         self.max_tc_displacement = 1.0 / self.alat_multiplier
 
         self.danger_item = fix.db.get_item("DANGER_LEVEL", create=True, wait=False)
+        self.dangers = None
 
     def y_pos(self, alpha):
         ret = (alpha - self.alpha_min) * self.height() / self.alpha_range
@@ -93,6 +97,7 @@ class AirBall(QGraphicsView):
         if self.alpha_min is None:
             self.alpha_min = -self.alpha_max
         self.alpha_range = self.alpha_max - self.alpha_min
+        self.initialize_danger_table()
 
         filter_depth = self.myparent.get_config_item('alat_filter_depth')
         if filter_depth is not None and filter_depth > 0:
@@ -199,8 +204,27 @@ class AirBall(QGraphicsView):
         self.aoa_item.badChanged.connect(self.quality_change)
         self.aoa_item.oldChanged.connect(self.quality_change)
         self.aoa_item.failChanged.connect(self.quality_change)
+        self.initialize_danger_table()
 
         self.update()
+
+    def initialize_danger_table(self):
+        dpath = self.myparent.get_config_item('dangers')
+        if dpath is None:
+            return
+        self.dangers = dict()
+        with open(dpath, 'r') as dangers:
+            headrow = dangers.readline().strip().split(',')
+            self.dinputs = headrow[:-2]
+            self.doutputs = headrow[-2:]
+            for d in dangers:
+                row = d.strip().split(',')
+                i = row[:-2]
+                o = row[-2:]
+                o = [float(o[0]), o[1]]
+                key = ''.join([v[0] for v in i])
+                self.dangers[key] = o
+            dangers.close()
 
     def update(self):
         acc_displacement = self._alat
@@ -211,7 +235,7 @@ class AirBall(QGraphicsView):
         centerball_x = (self.width()/2) * (1.0-(
                      acc_displacement * self.alat_multiplier))
         centerball_y = self.y_pos (self._aoa)
-        danger_level = self.get_danger_level()
+        danger_level,message = self.get_danger_level()
         ball_color,flash = self.get_ball_color(danger_level)
         self.danger_item.value = danger_level
         if self.aoa_item.bad or self.ias_item.bad or self.alat_item.bad or \
@@ -248,56 +272,65 @@ class AirBall(QGraphicsView):
         return QColor(r,g,b),flash
 
     def get_danger_level(self):
+        idict = dict()
+        # Input labels:  HAT,Roll,IAS,AOA,slip_skid,Danger,Comment
+        alat_danger = abs(self._alat) / self.max_tc_displacement
+        idict['slip_skid'] = 'L' if alat_danger < .2 else \
+                ('M' if alat_danger < .7 else 'H')
         Vs = self.ias_item.get_aux_value('Vs')
         Vs0 = self.ias_item.get_aux_value('Vs0')
         Vx = self.ias_item.get_aux_value('Vx')
         if Vx is None:
             Vx = Vs * 1.2
-        ret = 0
         agl = self.agl_item.value
         if self.agl_item.old or self.agl_item.bad or self.agl_item.fail:
-            agl = 10000
-        # First eliminate some standard flight states as 0 danger
-        if self.alpha_warn is None:
-            alpha_warn = self.alpha_stall * 3 / 4
+            agl = VirtualVfr.agl_estimate()
+            if agl is None:
+                agl = 10000
+            log.debug ("agl estimate %.3g"%agl)
+        idict['HAT'] = 'H' if agl > 3000 else 'L'
+        ias_ratio = self._ias / Vs
+        idict['IAS'] = 'H' if ias_ratio > 1.2 else 'L'
+        aoa_ratio = self._aoa / self.alpha_stall
+        idict['AOA'] = 'L' if aoa_ratio < .4 else \
+                ('M' if aoa_ratio < .7 else 'H')
+        idict['Roll'] = 'L' if abs(self.roll_item.value) < 20 else 'H'
+        key = ''
+        for kn in self.dinputs:
+            key += idict[kn]
+        if key not in self.dangers:
+            k1 = key.replace('M', 'H', 1)
+            o1 = self.dangers[k1]
+            k2 = key.replace('M', 'L', 1)
+            o2 = self.dangers[k2]
+            ret = [(o1[0] + o2[0])/2.0, o1[1]]
         else:
-            alpha_warn = self.alpha_warn
-        if self._ias >= Vx and self._aoa < alpha_warn:
-            return 0
+            ret = self.dangers[key]
+
+        # Eliminate some standard flight states as 0 danger
         if self._ias < .2 * Vs0 and abs(self.vs_item.value) < 20:
             # Not flying
-            return 0
+            return [0, '']
         if abs(self.vs_item.value) < 20 and \
-                VirtualVfr.in_airport_vicinity():
+                    VirtualVfr.in_airport_vicinity() and \
+                    agl < 200:
             # Landed or taxi'ing. Either way, no need to sound the alarm here
-            return 0
-        if self._alat < .05 and \
-                abs(self.roll_item.value) < 5 and VirtualVfr.is_over_runway():
+            log.debug ("On ground at airport")
+            return [0, '']
+        if abs(self.roll_item.value) < 5 and VirtualVfr.is_over_runway():
             # Normal takeoff and landing
-            return 0
-        # Things are not quite normal here. Evaluate danger.
-        # Assume imminent death, and downgrade alarm according to
-        # input data
-        ret = 10.0
-        ias_margin = (self._ias - Vs) / Vs
-        if ias_margin > 0:
-            ret -= ias_margin * 10  # 10% speed margin sheds 1 point of danger
-        aoa_margin = (self.alpha_stall - abs(self._aoa)) / self.alpha_stall
-        if aoa_margin > 0:
-            ret -= aoa_margin * 10  # 10% AOA margin sheds 1 point of danger
-        alat_danger = abs((self._alat) / .3) * 10
-        ret += alat_danger
-        roll_safety = (5 - abs(self.roll_item.value)) / 4
-        roll_safety = min(1,roll_safety)
-        ret -= roll_safety
-        altitude_safety = agl / 10000
-        if altitude_safety > 1:
-            altitude_safety = 1
-        ret -= altitude_safety
-        if ret < 0:
-            ret = 0
-        if ret > 10:
-            ret = 10
+            log.debug ("Over runway. No danger")
+            return [0, '']
+        # Check if flight into terrain is imminent
+        vs = self.vs_item.value
+        if vs < 0 and agl / (-vs) < 1.0 and \
+                (not VirtualVfr.in_airport_vicinity()):
+            # 60 seconds to off-airport impact
+            dlevel = ret[0] + 5.0
+            if dlevel > 10:
+                dlevel = 10
+            ret = [dlevel, ret[1] + ' Terrain Alert!']
+        log.debug ("table danger[%s]: %s"%(key,str(ret)))
         return ret
 
 

@@ -52,6 +52,7 @@ class AuralWarnings:
         self.audio_playing = None
         self.audio_volume = None
         self.feed_thread = None
+        self.set_aural_warning(self.danger_item.value)
 
     def quit(self):
         self.stop()
@@ -90,7 +91,6 @@ class AuralWarnings:
         self.audio_playing = path
 
     def set_aural_warning(self, danger_level):
-        print ("danger_level %.2g"%danger_level)
         if self.aural_warnings is not None:
             if danger_level > self.aural_warnings[0][0]:
                 for level in range(1,len(self.aural_warnings)+1):

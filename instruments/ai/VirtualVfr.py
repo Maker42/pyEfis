@@ -51,6 +51,7 @@ NAUT_MILES_PER_METER = .0005399568
 FEET_NM = FEET_METER / NAUT_MILES_PER_METER
 
 VVObject = None
+POVObject = None
 
 class VirtualVfr(AI):
     CENTERLINE_WIDTH = 3
@@ -62,9 +63,11 @@ class VirtualVfr(AI):
     PAPI_LIGHT_SPACING = 9
     VORTAC_ICON_PATH="vortac.png"
     def __init__(self, parent=None):
+        global VVObject, POVObject
         super(VirtualVfr, self).__init__(parent)
         self.display_objects = dict()
-        VVObject = self
+        if VVObject is None:
+            VVObject = self
         self.lng_item = fix.db.get_item("LONG")
         self.lat_item = fix.db.get_item("LAT")
         self.head_item = fix.db.get_item("HEAD")
@@ -88,15 +91,16 @@ class VirtualVfr(AI):
         t = QGraphicsSimpleTextItem ("9 9")
         t.setFont (minfont)
         self.min_font_width = t.boundingRect().width()
-        self.pov = None
+        self.pov = POVObject
 
     def resizeEvent(self, event):
         super(VirtualVfr, self).resizeEvent(event)
-        self.pov = PointOfView(self.myparent.get_config_item('dbpath'),
-                               self.myparent.get_config_item('indexpath'),
-                               self.myparent.get_config_item('refresh_period'))
-        self.pov.initialize(["Runway", "Airport"], self.scene.width(),
-                    self.lng, self.lat, self.altitude, self.true_heading)
+        if self.pov is None:
+            self.pov = PointOfView(self.myparent.get_config_item('dbpath'),
+                                   self.myparent.get_config_item('indexpath'),
+                                   self.myparent.get_config_item('refresh_period'))
+            self.pov.initialize(["Runway", "Airport"], self.scene.width(),
+                        self.lng, self.lat, self.altitude, self.true_heading)
         self.lng_item.valueChanged[float].connect(self.setLongitude)
         self.lng_item.badChanged[bool].connect(self.setBlank)
         self.lng_item.oldChanged[bool].connect(self.setBlank)
@@ -497,11 +501,22 @@ class VirtualVfr(AI):
                 self.scene.removeItem(self.display_objects[key])
             self.display_objects = dict()
 
+    def agl_estimate(self):
+        global POVObject
+        if self.pov is None:
+            self.pov = POVObject
+        if self.pov is not None:
+            return self.alt_item.value - self.pov.elevation
+        else:
+            return None
+
 VIEWPORT_ANGLE100 = 35.0 / 2.0 * RAD_DEG
 
 class PointOfView:
     sorted_object_types = ["Airport", "Fix"]
     def __init__(self, dbpath, index_path, refresh_period):
+        global POVObject
+        POVObject = self
         # Inputs
         self.altitude = 0
         self.gps_lat = 0
@@ -637,7 +652,7 @@ class PointOfView:
                 if not block in self.object_cache:
                     self.object_cache[block] = CIFPObjects.find_objects(
                                     self.dbpath, self.index_path, block[0], block[1])
-                    #print ("New cache block has %d objects at %f,%f"%(len(self.object_cache[block]), self.gps_lat, self.gps_lng))
+                    log.debug ("New cache block has %d objects at %f,%f"%(len(self.object_cache[block]), self.gps_lat, self.gps_lng))
         # Match runways
         self.last_cache_time = time.time()
         while True:
@@ -711,7 +726,7 @@ class PointOfView:
                         elevation = obj.elevation
         return elevation
 
-    def is_over_runway():
+    def is_over_runway(self):
         NOMIN = 99999999
         min_distance = NOMIN
         rel_lng = 0
@@ -719,7 +734,8 @@ class PointOfView:
         curpos = (self.gps_lng,self.gps_lat)
         for object_list in self.object_cache.values():
             for obj in object_list:
-                if isinstance(obj, CIFPObjects.Runway):
+                if isinstance(obj, CIFPObjects.Runway) and \
+                            obj.opposing_rw is not None:
                     course = [curpos, (obj.lng,obj.lat)]
                     distance, rel_lng = \
                             Distance(course, rel_lng=rel_lng)
@@ -727,17 +743,24 @@ class PointOfView:
                         min_distance = distance
                         runway = obj
         ret = False
+        log.debug ("runway distance: %g to %s"%(min_distance, runway.name))
         if runway is not None:
             opp_runway = runway.opposing_rw
             if opp_runway is not None:
                 runway_course = [(runway.lng,runway.lat),
                                  (opp_runway.lng,opp_runway.lat)]
-                dev,between = CourseDeviationBetween(curpos, runway_course, rel_lng)
+                dev,between,inline = CourseDeviationBetween(curpos,
+                                runway_course, rel_lng)
+                log.log (5, "runway %s: %g dev %s between"%(runway.name, dev, "is" if between else "not"))
                 if between and dev < 300:
+                    log.debug("Over runway")
+                    ret = True
+                if inline and dev < 300 and min_distance < 1:
+                    log.debug("Inline with runway")
                     ret = True
         return ret
 
-    def in_airport_vicinity():
+    def in_airport_vicinity(self):
         NOMIN = 99999999
         min_distance = NOMIN
         rel_lng = 0
@@ -753,6 +776,7 @@ class PointOfView:
                         min_distance = distance
                         airport = obj
         ret = False
+        log.debug ("airport distance: %g to %s"%(min_distance, airport.name))
         if airport is not None and min_distance < 3:
             ret = True
         return ret
@@ -800,16 +824,22 @@ class PointOfView:
 
 
 def in_airport_vicinity():
-    if VVObject is None:
+    if POVObject is None:
         return False
     else:
-        return VVObject.in_airport_vicinity()
+        return POVObject.in_airport_vicinity()
 
 def is_over_runway():
-    if VVObject is None:
+    if POVObject is None:
         return False
     else:
-        return VVObject.is_over_runway()
+        return POVObject.is_over_runway()
+
+def agl_estimate():
+    if VVObject is None:
+        return None
+    else:
+        return VVObject.agl_estimate()
 
 def yvec_points_east (yvec, pov_position, pov_polar):
     yvec_pos = copy.copy(yvec)
@@ -887,6 +917,9 @@ def Distance(course, rel_lng=0):
 
     return distance, relative_lng_length
 
+def atan_globe(lng, lat):
+    return math.atan2(lng,lat)
+
 def CourseDeviationBetween(pos, course, rel_lng = 0):
     if rel_lng == 0:
         rel_lng = GetRelLng(course[0][1] * RAD_DEG)
@@ -894,9 +927,11 @@ def CourseDeviationBetween(pos, course, rel_lng = 0):
     cvec = Spatial.Vector(dlng,dlat,0)
     up = Spatial.Vector(0,0,1)
     pnormal = cvec.cross_product(up)
+    #print ("cvec = %s, pnormal=%s"%(str(cvec), str(pnormal)))
     destpoint = Spatial.Point3(course[1][0] * rel_lng, course[1][1], 0)
     course_plane = Spatial.Plane(destpoint, normal=pnormal)
     curpoint = Spatial.Point3 (pos[0] * rel_lng, pos[1], 0)
+    #print ("destpoint = %s, curpoint=%s"%(str(destpoint), str(curpoint)))
     r = Spatial.Ray(curpoint,dir=pnormal)
     intersect = course_plane.intersect(r)
 
@@ -905,6 +940,7 @@ def CourseDeviationBetween(pos, course, rel_lng = 0):
     side = deviation_vect.norm()
     side *= 60.0        # 60 nm per degree
     side *= FEET_NM
+    #print ("deviation_vect: %s; intersect=%s, ray=%s; side=%g"%(str(deviation_vect), str(intersect), str(r), side))
 
     dlng, dlat = GetAdjustedPolarDeltas ([pos, course[1]], rel_lng)
     heading_to_dest = atan_globe(dlng, dlat) * 180 / M_PI
@@ -915,9 +951,12 @@ def CourseDeviationBetween(pos, course, rel_lng = 0):
         hdiff -= 360
     elif hdiff < -180:
         hdiff += 360
-    between = abs(hdiff) > 90
+    between = abs(hdiff) > 120
+    inline = abs(hdiff) < 60
+    #print ("between=%s, heading_to_origin=%g, dest=%g, diff=%g"%(str(between),
+    #            heading_to_origin, heading_to_dest, hdiff))
 
-    return (side, between)
+    return (side, between, inline)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,65 @@
+HAT,Roll,IAS,AOA,slip_skid,Danger,Comment
+High,High,High,High,High,8,Spin Alert!
+High,High,High,High,Low,2,
+High,High,High,Low,High,5,Uncoordinated flight
+High,High,High,Low,Low,0,
+High,High,Low,High,High,9,Spin Alert!
+High,High,Low,High,Low,7,Spin warning. Stall warning
+High,High,Low,Low,High,8,Spin warning
+High,High,Low,Low,Low,2,
+High,Low,High,High,High,8,Spin Alert!
+High,Low,High,High,Low,1,
+High,Low,High,Low,High,5,Uncoordinated flight
+High,Low,High,Low,Low,0,
+High,Low,Low,High,High,8,Spin Alert!
+High,Low,Low,High,Low,3,Stall warning
+High,Low,Low,Low,High,8,Spin warning
+High,Low,Low,Low,Low,0,
+Low,High,High,High,High,8,Spin Alert!
+Low,High,High,High,Low,4,
+Low,High,High,Low,High,7,Uncoordinated flight
+Low,High,High,Low,Low,2,
+Low,High,Low,High,High,10,Spin Alert!
+Low,High,Low,High,Low,9,Low altitude stall. Spin warning
+Low,High,Low,Low,High,8,Spin warning
+Low,High,Low,Low,Low,5,Low and slow sharp turn
+Low,Low,High,High,High,8,Spin Alert!
+Low,Low,High,High,Low,1,
+Low,Low,High,Low,High,7,Uncoordinated flight
+Low,Low,High,Low,Low,0,
+Low,Low,Low,High,High,10,Spin Alert!
+Low,Low,Low,High,Low,7,Low altitude stall.
+Low,Low,Low,Low,High,8,Spin warning
+Low,Low,Low,Low,Low,0,
+High,High,High,High,Med,6,Spin Alert!
+High,High,High,Low,Med,4,Uncoordinated flight
+High,High,Low,High,Med,8,Spin Alert!
+High,High,Low,Low,Med,8,Spin warning
+High,Low,High,High,Med,8,Spin Alert!
+High,Low,High,Low,Med,5,Uncoordinated flight
+High,Low,Low,High,Med,7,Spin Alert!
+High,Low,Low,Low,Med,5,Spin warning
+Low,High,High,High,Med,8,Spin Alert!
+Low,High,High,Low,Med,7,Uncoordinated flight
+Low,High,Low,High,Med,10,Spin Alert!
+Low,High,Low,Low,Med,7,Spin warning
+Low,Low,High,High,Med,8,Spin Alert!
+Low,Low,High,Low,Med,7,Uncoordinated flight
+Low,Low,Low,High,Med,9,Spin Alert!
+Low,Low,Low,Low,Med,6,Spin warning
+High,High,High,Med,High,8,Spin Alert!
+High,High,High,Med,Low,1,
+High,High,Low,Med,High,9,Spin Alert!
+High,High,Low,Med,Low,5,Spin warning. Stall warning
+High,Low,High,Med,High,8,Spin Alert!
+High,Low,High,Med,Low,0,
+High,Low,Low,Med,High,8,Spin Alert!
+High,Low,Low,Med,Low,2,Stall warning
+Low,High,High,Med,High,8,Spin Alert!
+Low,High,High,Med,Low,3,
+Low,High,Low,Med,High,10,Spin Alert!
+Low,High,Low,Med,Low,7,Low altitude stall. Spin warning
+Low,Low,High,Med,High,8,Spin Alert!
+Low,Low,High,Med,Low,0,
+Low,Low,Low,Med,High,10,Spin Alert!
+Low,Low,Low,Med,Low,5,Low altitude stall.

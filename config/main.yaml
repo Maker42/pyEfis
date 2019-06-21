@@ -144,6 +144,7 @@ screens:
     indexpath: CIFP/index.bin
     check_engine: [MAP1, TACH1, OILP1, OILT1, FUELQT, FUELF1, CHTMAX1, EGTAVG1]
     update_period: .1
+    dangers: config/danger.csv
 
   PFD:
     module: screens.pfd
@@ -153,6 +154,7 @@ screens:
     update_period: .1
     alpha_x: 8
     alpha_y: 6.5
+    dangers: config/danger.csv
 
   EMS:
     module: screens.ems_sm
