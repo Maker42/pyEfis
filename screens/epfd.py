@@ -31,6 +31,8 @@ from instruments import airspeed
 from instruments import altimeter
 from instruments import vsi
 from instruments import tc
+from instruments.airball import AirBall
+from instruments import message
 
 class Screen(QWidget):
     def __init__(self, parent=None):
@@ -59,10 +61,12 @@ class Screen(QWidget):
         self.alt_setting = altimeter.Altimeter_Setting(self)
         self.check_engine = CheckEngine(self)
         self.tc = tc.TurnCoordinator(self, dial=False)
+        self.air_ball = AirBall(self)
 
     def resizeEvent(self, event):
         instWidth = self.width()- 80
         instHeight = self.height() - 130
+        self.system_message = message.Message(instWidth-110, 50, self)
         self.ai.move(0, 40)
         self.ai.resize(instWidth, instHeight)
 
@@ -78,6 +82,9 @@ class Screen(QWidget):
         #self.as_Trend.resize(10, instHeight)
         #self.as_Trend.move(90, 100)
 
+        self.air_ball.resize (instWidth/10, instHeight/5)
+        self.air_ball.move (100, 120)
+
         self.asd_Box.resize(90, 60)
         self.asd_Box.move(0, instHeight + 50)
 
@@ -89,7 +96,7 @@ class Screen(QWidget):
 
         self.alt_setting.resize(90, 60)
         self.alt_setting.move(instWidth -100, instHeight + 50)
-        self.check_engine.move (instWidth - self.check_engine.width()-100, 45)
+        self.check_engine.move (instWidth - self.check_engine.width()-100, 65)
         engine_items = self.get_config_item("check_engine")
         if engine_items is not None and len(engine_items) > 0:
             self.check_engine.init_fix_items(engine_items)

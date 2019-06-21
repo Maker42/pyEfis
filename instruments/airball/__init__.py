@@ -61,6 +61,8 @@ class AirBall(QGraphicsView):
 
         self.danger_item = fix.db.get_item("DANGER_LEVEL", create=True, wait=False)
         self.dangers = None
+        self.message_item = fix.db.get_item("SYSMSG", create=True, wait=False)
+        self.my_message = ''
 
     def y_pos(self, alpha):
         ret = (alpha - self.alpha_min) * self.height() / self.alpha_range
@@ -237,6 +239,7 @@ class AirBall(QGraphicsView):
         centerball_y = self.y_pos (self._aoa)
         danger_level,message = self.get_danger_level()
         ball_color,flash = self.get_ball_color(danger_level)
+        self.update_message(message)
         self.danger_item.value = danger_level
         if self.aoa_item.bad or self.ias_item.bad or self.alat_item.bad or \
            self.aoa_item.old or self.ias_item.old or self.alat_item.old:
@@ -270,6 +273,32 @@ class AirBall(QGraphicsView):
         b = int(round(interpolate (color_ratio, blue_safe, blue_dang)))
         #print ("danger %.2g, rgb=%02x%02x%02x"%(danger_level, r,g,b))
         return QColor(r,g,b),flash
+
+    def update_message(self, msg):
+        delimiter = '; '
+        if msg == self.my_message:
+            return
+        if len(self.my_message) > 0:
+            if len(msg) == 0:
+                if delimiter + self.my_message in self.message_item.value:
+                    newmsg = self.message_item.value.replace (
+                            delimiter+self.my_message, msg)
+                elif self.my_message + delimiter in self.message_item.value:
+                    newmsg = self.message_item.value.replace (
+                            self.my_message+delimiter, msg)
+                else:
+                    newmsg = self.message_item.value.replace (
+                            self.my_message, msg)
+            else:
+                newmsg = self.message_item.value.replace (self.my_message, msg)
+            self.message_item.value = newmsg
+        else:
+            if len(self.message_item.value) > 0:
+                newmsg = self.message_item.value + delimiter+msg
+            else:
+                newmsg = msg
+            self.message_item.value = newmsg
+        self.my_message = msg
 
     def get_danger_level(self):
         idict = dict()

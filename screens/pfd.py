@@ -30,6 +30,7 @@ from instruments import airspeed
 from instruments import altimeter
 from instruments import vsi
 from instruments import tc
+from instruments import message
 from instruments.airball import AirBall
 
 class Screen(QWidget):
@@ -127,6 +128,7 @@ class Screen(QWidget):
     def resizeEvent(self, event):
         instWidth = self.width() - 240
         instHeight = self.height() - 200
+        self.system_message = message.Message(instWidth-110, 110, self)
         self.ai.move(0, 100)
         self.ai.resize(instWidth, instHeight)
 
