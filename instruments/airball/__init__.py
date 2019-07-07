@@ -359,6 +359,12 @@ class AirBall(QGraphicsView):
             if dlevel > 10:
                 dlevel = 10
             ret = [dlevel, ret[1] + ' Terrain Alert!']
+        # Check for graveyard spiral
+        if vs < -800 and idict['Roll'] == 'H':
+            dlevel = ret[0]
+            if dlevel < 9:
+                dlevel = 9
+            ret = [dlevel, ret[1] + ' Graveyard Spiral!']
         log.debug ("table danger[%s]: %s"%(key,str(ret)))
         return ret
 

@@ -776,7 +776,8 @@ class PointOfView:
                         min_distance = distance
                         airport = obj
         ret = False
-        log.debug ("airport distance: %g to %s"%(min_distance, airport.name))
+        if airport is not None:
+            log.debug ("airport distance: %g to %s"%(min_distance, airport.name))
         if airport is not None and min_distance < 3:
             ret = True
         return ret
